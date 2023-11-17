@@ -29,9 +29,14 @@
 #include <game/HakoniwaSequence/HakoniwaSequence.h>
 #include <game/GameData/GameDataFunction.h>
 
+#include <sead/math/seadQuatCalcCommon.h>
+#include <al/Library/LiveActor/ActorPoseKeeper.h>
+
 #include "rs/util.hpp"
 
 #include "agl/utl.h"
+
+#include "KoopaFreerunRecorder.hpp"
 
 static const char *DBG_FONT_PATH = "DebugData/Font/nvn_font_jis1.ntx";
 static const char *DBG_SHADER_PATH = "DebugData/Font/nvn_font_shader_jis1.bin";
@@ -40,6 +45,8 @@ static const char *DBG_TBL_PATH = "DebugData/Font/nvn_font_jis1_tbl.bin";
 #define IMGUI_ENABLED true
 
 sead::TextWriter *gTextWriter;
+
+bool recording = false;
 
 void drawDebugWindow() {
     HakoniwaSequence *gameSeq = (HakoniwaSequence *) GameSystemFunction::getGameSystem()->mCurSequence;
@@ -51,12 +58,15 @@ void drawDebugWindow() {
 
     static bool showWindow = false;
 
-    if (ImGui::Button("Toggle Demo Window")) {
-        showWindow = !showWindow;
+    if (recording) {
+        if (ImGui::Button("STOP Recording")) {
+            recording = false;
+        }
     }
-
-    if (showWindow) {
-        ImGui::ShowDemoWindow();
+    else {
+        if (ImGui::Button("START Recording")) {
+            recording = true;
+        }
     }
 
     auto curScene = gameSeq->mStageScene;
@@ -121,8 +131,40 @@ void drawDebugWindow() {
     ImGui::End();
 }
 
+namespace {
+int frameIndex = 0;
+KoopaFreerunRecorder recorder;
+void recordFrame(PlayerActorBase* playerBase) {
+    if (!recording) {
+        return;
+    }
+    frameIndex++;
+    if (frameIndex < 1) { // Record every N frames
+        return;
+    }
+    frameIndex = 0;
+
+    sead::Vector3f rot;
+    sead::QuatCalcCommon<float>::calcRPY(rot, al::getQuat(playerBase));
+    KoopaFreerunRecorder::Frame frame{
+        .pos = al::getTrans(playerBase),
+        .rot = rot,
+        .animId = 1,
+        .animFrame = 0,
+    };
+    recorder.recordFrame(frame);
+}
+}
+
 HOOK_DEFINE_TRAMPOLINE(ControlHook) {
     static void Callback(StageScene *scene) {
+
+        bool isInGame = scene && scene->mIsAlive;
+        if (isInGame) {
+            PlayerActorBase *playerBase = rs::getPlayerActor(scene);
+            recordFrame(playerBase);
+        }
+
         Orig(scene);
     }
 };

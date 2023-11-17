@@ -75,6 +75,7 @@ namespace nn::fs {
         handle: Handle representing file to check.
     */
     Result GetFileSize(long* size, nn::fs::FileHandle handle);
+    Result SetFileSize(nn::fs::FileHandle handle, long size);
 
     /*
         Writes to a file.

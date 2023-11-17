@@ -4,6 +4,7 @@ FTP_IP ?= 10.0.0.225 # put console IP here
 
 all:
 	cmake --toolchain=cmake/toolchain.cmake -DLOGGER_IP=$(LOGGER_IP) -S . -B build && $(MAKE) -C build subsdk9_meta
+	bash ./deploy_build.sh
 
 send:
 	cmake --toolchain=cmake/toolchain.cmake -DFTP_IP=$(FTP_IP) -DLOGGER_IP=$(LOGGER_IP) -S . -B build && $(MAKE) -C build subsdk9_meta
