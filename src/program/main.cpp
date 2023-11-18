@@ -1,3 +1,5 @@
+#include <numbers>
+
 #include "lib.hpp"
 #include "imgui_backend/imgui_impl_nvn.hpp"
 #include "patches.hpp"
@@ -29,9 +31,6 @@
 #include <game/HakoniwaSequence/HakoniwaSequence.h>
 #include <game/GameData/GameDataFunction.h>
 
-#include <sead/math/seadQuatCalcCommon.h>
-#include <al/Library/LiveActor/ActorPoseKeeper.h>
-
 #include "rs/util.hpp"
 
 #include "agl/utl.h"
@@ -45,115 +44,38 @@ static const char *DBG_TBL_PATH = "DebugData/Font/nvn_font_jis1_tbl.bin";
 #define IMGUI_ENABLED true
 
 sead::TextWriter *gTextWriter;
-
-bool recording = false;
+KoopaFreerunRecorder recorder;
 
 void drawDebugWindow() {
     HakoniwaSequence *gameSeq = (HakoniwaSequence *) GameSystemFunction::getGameSystem()->mCurSequence;
 
-    ImGui::Begin("Game Debug Window");
-    ImGui::SetWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+    bool _;
+    const ImVec4 c(0.95f, 0.95f, 0.95f, 1.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, c);
+    ImGui::Begin("KoopaFreerunRecorder", &_,
+        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::SetWindowSize(ImVec2(210, 80), ImGuiCond_FirstUseEver);
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
 
-    ImGui::Text("Current Sequence Name: %s", gameSeq->getName().cstr());
-
-    static bool showWindow = false;
-
-    if (recording) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.1f, 0.1f, 0.1f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_Button, c);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f*c.x, 0.9f*c.y, 0.9f*c.z, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f*c.x, 0.75f*c.y, 0.75f*c.z, 1.f));
+    if (recorder.isRecording()) {
         if (ImGui::Button("STOP Recording")) {
-            recording = false;
+            recorder.stopRecording();
         }
     }
     else {
         if (ImGui::Button("START Recording")) {
-            recording = true;
+            recorder.startRecording();
         }
     }
-
-    auto curScene = gameSeq->mStageScene;
-
-    bool isInGame =
-            curScene && curScene->mIsAlive;
-
-    if (ImGui::CollapsingHeader("World List")) {
-        for (auto &entry: gameSeq->mGameDataHolder.mData->mWorldList->mWorldList) {
-            if (ImGui::TreeNode(entry.mMainStageName)) {
-
-                if (isInGame) {
-                    if (ImGui::Button("Warp to World")) {
-                        PlayerHelper::warpPlayer(entry.mMainStageName, gameSeq->mGameDataHolder);
-                    }
-                }
-
-                ImGui::BulletText("Clear Main Scenario: %d", entry.mClearMainScenario);
-                ImGui::BulletText("Ending Scenario: %d", entry.mEndingScenario);
-                ImGui::BulletText("Moon Rock Scenario: %d", entry.mMoonRockScenario);
-
-                if (ImGui::TreeNode("Main Quest Infos")) {
-                    for (int i = 0; i < entry.mQuestInfoCount; ++i) {
-                        ImGui::BulletText("Quest %d Scenario: %d", i, entry.mMainQuestIndexes[i]);
-                    }
-                    ImGui::TreePop();
-                }
-
-                if (ImGui::CollapsingHeader("Database Entries")) {
-                    for (auto &dbEntry: entry.mStageNames) {
-                        if (ImGui::TreeNode(dbEntry.mStageName.cstr())) {
-                            ImGui::BulletText("Stage Category: %s", dbEntry.mStageCategory.cstr());
-                            ImGui::BulletText("Stage Use Scenario: %d", dbEntry.mUseScenario);
-
-                            if (isInGame) {
-                                ImGui::Bullet();
-                                if (ImGui::SmallButton("Warp to Stage")) {
-                                    PlayerHelper::warpPlayer(dbEntry.mStageName.cstr(),
-                                                             gameSeq->mGameDataHolder);
-                                }
-                            }
-
-                            ImGui::TreePop();
-                        }
-                    }
-                }
-
-                ImGui::TreePop();
-            }
-        }
-    }
-
-    if (isInGame) {
-        StageScene *stageScene = gameSeq->mStageScene;
-        PlayerActorBase *playerBase = rs::getPlayerActor(stageScene);
-
-        if (ImGui::Button("Kill Mario")) {
-            PlayerHelper::killPlayer(playerBase);
-        }
-    }
+    ImGui::PopStyleColor(4);
 
     ImGui::End();
-}
-
-namespace {
-int frameIndex = 0;
-KoopaFreerunRecorder recorder;
-void recordFrame(PlayerActorBase* playerBase) {
-    if (!recording) {
-        return;
-    }
-    frameIndex++;
-    if (frameIndex < 1) { // Record every N frames
-        return;
-    }
-    frameIndex = 0;
-
-    sead::Vector3f rot;
-    sead::QuatCalcCommon<float>::calcRPY(rot, al::getQuat(playerBase));
-    KoopaFreerunRecorder::Frame frame{
-        .pos = al::getTrans(playerBase),
-        .rot = rot,
-        .animId = 1,
-        .animFrame = 0,
-    };
-    recorder.recordFrame(frame);
-}
 }
 
 HOOK_DEFINE_TRAMPOLINE(ControlHook) {
@@ -162,7 +84,7 @@ HOOK_DEFINE_TRAMPOLINE(ControlHook) {
         bool isInGame = scene && scene->mIsAlive;
         if (isInGame) {
             PlayerActorBase *playerBase = rs::getPlayerActor(scene);
-            recordFrame(playerBase);
+            recorder.recordFrame(playerBase);
         }
 
         Orig(scene);
