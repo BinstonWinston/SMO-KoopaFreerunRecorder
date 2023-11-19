@@ -15,88 +15,40 @@
 
 const char* RECORDING_PATH = "sd:/koopafreerun.byml";
 
-Result writeFile(std::string const& str, s64 offset, const void* data, size_t length) {
-    nn::fs::DirectoryEntryType entryType;
-    Result rc = nn::fs::GetEntryType(&entryType, str.c_str());
+bool isFileExist(const char *path) {
+    nn::fs::DirectoryEntryType type;
+    nn::fs::GetEntryType(&type, path);
 
-    if (rc == 0x202) {  // Path does not exist
-        R_TRY(nn::fs::CreateFile(str.c_str(), offset + length));
-    } else if (R_FAILED(rc))
-        return rc;
-
-    if (entryType == nn::fs::DirectoryEntryType_Directory) return -1;
-
-    nn::fs::FileHandle handle;
-    R_TRY(nn::fs::OpenFile(&handle, str.c_str(), nn::fs::OpenMode_ReadWrite | nn::fs::OpenMode_Append));
-
-    Result r;
-    s64 fileSize;
-    r = nn::fs::GetFileSize(&fileSize, handle);
-    if (R_FAILED(r)) {
-        nn::fs::CloseFile(handle);
-        return r;
-    }
-
-    if (fileSize < offset + (s64)length) {  // make sure we have enough space
-        r = nn::fs::SetFileSize(handle, offset + length);
-
-        if (R_FAILED(r)) {
-            nn::fs::CloseFile(handle);
-            return r;
-        }
-    }
-
-    r = nn::fs::WriteFile(handle, offset, data, length,
-                          nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush));
-
-    nn::fs::CloseFile(handle);
-    return r;
+    return type == nn::fs::DirectoryEntryType_File;
 }
 
-Result readFile(std::string const& str, s64 offset, void* data, size_t length) {
-    nn::fs::DirectoryEntryType entryType;
-    Result rc = nn::fs::GetEntryType(&entryType, str.c_str());
-
-    if (rc == 0x202) {  // Path does not exist
-        R_TRY(nn::fs::CreateFile(str.c_str(), offset + length));
-    } else if (R_FAILED(rc))
-        return rc;
-
-    if (entryType == nn::fs::DirectoryEntryType_Directory) return -1;
-
+nn::Result writeFileToPath(void *buf, size_t size, const char *path) {
     nn::fs::FileHandle handle;
-    R_TRY(nn::fs::OpenFile(&handle, str.c_str(), nn::fs::OpenMode_ReadWrite | nn::fs::OpenMode_Append));
 
-    Result r;
-    s64 fileSize;
-    r = nn::fs::GetFileSize(&fileSize, handle);
-    if (R_FAILED(r)) {
-        nn::fs::CloseFile(handle);
-        return r;
+    if (isFileExist(path)) {
+        nn::fs::DeleteFile(path); // remove previous file
     }
 
-    if (fileSize < offset + (s64)length) {  // make sure we have enough space
-        r = nn::fs::SetFileSize(handle, offset + length);
-
-        if (R_FAILED(r)) {
-            nn::fs::CloseFile(handle);
-            return r;
-        }
+    if (nn::fs::CreateFile(path, size)) {
+        return 1;
     }
 
-    r = nn::fs::ReadFile(handle, offset, data, length);
+    if (nn::fs::OpenFile(&handle, path, nn::fs::OpenMode_Write)) {
+        return 1;
+    }
+
+    if (nn::fs::WriteFile(handle, 0, buf, size, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush))) {
+        return 1;
+    }
+
 
     nn::fs::CloseFile(handle);
-    return r;
-}
 
-void deleteFileIfExists(std::string const& path) {
-    nn::fs::DeleteFile(path.c_str());
+    return 0;
 }
 
 void KoopaFreerunRecorder::startRecording() {
     m_isRecording = true;
-    deleteFileIfExists(RECORDING_PATH);
     m_byamlWriter = std::make_unique<al::ByamlWriter>(al::getWorldResourceHeap(), true);
     m_byamlWriter->pushHash();
     m_byamlWriter->addString("HackName", "");
@@ -132,22 +84,17 @@ namespace sead {
 
 struct MyRamStreamSrc : sead::StreamSrc
 {
+    void* mBuffer;
     u32 mLength;
     int mPos;
 
     u32 read(void* data, u32 size) override {
-        readFile(RECORDING_PATH, mPos, data, size);
+        memcpy(data, mBuffer+mPos, size);
         mPos += size;
         return size;
     }
     u32 write(const void* data, u32 size) override {
-        Logger::log("Write occurred %d bytes: ", size);
-        for (size_t i = 0; i < size; i++) {
-            uint8_t c = ((const uint8_t*)data)[i];
-            Logger::log("%d, ", c);
-        }
-        Logger::log("\n");
-        writeFile(RECORDING_PATH, mPos, data, size);
+        memcpy(mBuffer+mPos, data, size);
         mPos += size;
         return size;
     }
@@ -163,7 +110,8 @@ struct MyRamStreamSrc : sead::StreamSrc
 struct MyRamWriteStream : public sead::WriteStream
 {
 public:
-    MyRamWriteStream(u32 length, sead::Stream::Modes mode) {
+    MyRamWriteStream(void* buffer, u32 length, sead::Stream::Modes mode) {
+        mSrc.mBuffer = buffer;
         mSrc.mLength = length;
         mSrc.mPos = 0;
         setMode(mode);
@@ -185,17 +133,21 @@ void KoopaFreerunRecorder::stopRecording() {
 
     auto const length = m_byamlWriter->calcHeaderSize() + m_byamlWriter->calcPackSize();
 
-    // auto heap = al::getWorldResourceHeap();
-    // auto buffer = heap->tryAlloc(length, 8);
-    // if (!buffer) {
-    //     // Logger::log("Out of memory, could not allocate RamWriteStream buffer\n");
-    //     return;
-    // }
-    sead::MyRamWriteStream ws(length, sead::Stream::Modes::Binary);
+    auto heap = al::getWorldResourceHeap();
+    char* buffer = (char*)heap->tryAlloc(length, 8);
+    if (!buffer) {
+        Logger::log("Out of memory, could not allocate buffer\n");
+        return;
+    }
+    sead::MyRamWriteStream ws(buffer, length, sead::Stream::Modes::Binary);
     m_byamlWriter->write(&ws);
-    char magicNum[2] = {'Y', 'B'};
-    writeFile(RECORDING_PATH, 0, magicNum, sizeof(magicNum));
-    // writeFile(RECORDING_PATH, 0, buffer, length);
+    // const u32 BUF_SIZE = 1;
+    // for (int i = 0; i < length; i+=BUF_SIZE) {
+    //     writeFile(RECORDING_PATH, i, buffer+i, std::min(BUF_SIZE, length-i));
+    // }
+    writeFileToPath(buffer, length, RECORDING_PATH);
+    // char magicNum[2] = {'Y', 'B'};
+    // writeFile(RECORDING_PATH, 0, magicNum, sizeof(magicNum));
 }
 
 bool KoopaFreerunRecorder::isRecording() const {

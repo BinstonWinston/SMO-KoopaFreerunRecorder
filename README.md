@@ -2,7 +2,7 @@
 
 # Credits
 - [SMO-Exlaunch-Base](https://github.com/CraftyBoss/SMO-Exlaunch-Base)
-- File writing code, crustysean+skyline
+- File writing code, Amethyst-szs LunaKit [fsHelpers.cpp](https://github.com/Amethyst-szs/smo-lunakit/blob/stable/src/helpers/fsHelper.cpp)
 - [exlaunch](https://github.com/shadowninja108/exlaunch/)
 - [exlaunch-cmake](https://github.com/EngineLessCC/exlaunch-cmake/)
 - [BDSP](https://github.com/Martmists-GH/BDSP)
