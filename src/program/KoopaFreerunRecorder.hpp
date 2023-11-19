@@ -1,6 +1,9 @@
 #pragma once
 
 #include <string>
+#include <memory>
+
+#include <al/Library/Yaml/Writer/ByamlWriter.h>
 
 #include <sead/math/seadVector.h>
 #include <game/Player/PlayerActorBase.h>
@@ -13,7 +16,7 @@ public:
     void recordFrame(PlayerActorBase* playerBase);
 private:
     bool m_isRecording = false;
-    size_t m_filePos = 0;
+    std::unique_ptr<al::ByamlWriter> m_byamlWriter = nullptr;
 
     struct Frame {
         sead::Vector3f pos, rot;
@@ -21,5 +24,4 @@ private:
         float animFrame;
     };
     void recordFrame(Frame const& frame);
-    void writeString(std::string const& s);
 };

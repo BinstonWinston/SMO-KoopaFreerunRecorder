@@ -34,7 +34,7 @@ public:
 
 protected:
     StreamFormat* mFormat;
-    StreamSrc* mSrc;
+    StreamSrc* mSrcPtr;
     Endian::Types mEndian;
 };
 

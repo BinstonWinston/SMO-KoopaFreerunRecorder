@@ -232,7 +232,7 @@ HOOK_DEFINE_TRAMPOLINE(DrawDebugMenu) {
         gTextWriter->beginDraw();
 
         gTextWriter->setCursorFromTopLeft(sead::Vector2f(10.f, 10.f));
-        gTextWriter->printf("FPS: %d\n", static_cast<int>(round(Application::instance()->mFramework->calcFps())));
+        // gTextWriter->printf("FPS: %d\n", static_cast<int>(round(Application::instance()->mFramework->calcFps())));
 
         gTextWriter->endDraw();
 

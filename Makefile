@@ -1,4 +1,4 @@
-LOGGER_IP ?= "10.0.0.224" # put log server IP in string
+LOGGER_IP ?= "127.0.0.1" # put log server IP in string
 FTP_IP ?= 10.0.0.225 # put console IP here
 .PHONY: all clean
 
@@ -13,4 +13,4 @@ clean:
 	rm -r build || true
 
 log: all
-	python3.8 scripts/tcpServer.py 0.0.0.0
+	python3 scripts/tcpServer.py 0.0.0.0

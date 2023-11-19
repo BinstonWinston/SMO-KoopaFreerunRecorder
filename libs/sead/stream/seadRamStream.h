@@ -4,7 +4,7 @@
 #include "stream/seadStreamSrc.h"
 
 namespace sead {
-class RamStreamSrc : public StreamSrc {
+struct RamStreamSrc : public StreamSrc {
 public:
     RamStreamSrc(void *buffer, u32 size);
     ~RamStreamSrc();
